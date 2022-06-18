@@ -1,6 +1,6 @@
 #include "snowfox.h"
 #include "snowfox_ble.h"
-
+#include "math.h"
 const SPIConfig spi1Config = {
   .clock_divider = 1, // No Division
   .clock_prescaler = 24, // To 2MHz
@@ -45,11 +45,64 @@ void led_profile_static_update(void) {
     }
 }
 
+/* Cycle all odd led while keeping the even leds static */
+void led_profile_cycle_update_half(void) {
+    static HsvColor currentColor = {.h = 0, .s = 0xFF, .v = 0xFF};
+    currentColor.h += 1;
+    currentColor.v = led_brightness;
+    RgbColor rgb = HsvToRgb(currentColor);
+    for (int i = 0; i < 61; i += 2)
+    {
+        sled_set_color(i, rgb.r, rgb.g, rgb.b);
+    }
+}
+
+/* Cycle odd leds in one direction and even leds in reverse */
+void led_profile_cycle_update_bidirectional(void) {
+    static HsvColor currentColor = {.h = 0, .s = 0xFF, .v = 0xFF};
+    static HsvColor currentColor_reverse = {.h = 0, .s = 0xFF, .v = 0xFF};
+
+    currentColor.h += 1;
+    currentColor_reverse.h -= 1;
+    currentColor.v = led_brightness;
+    currentColor_reverse.v = led_brightness;
+    RgbColor rgb = HsvToRgb(currentColor);
+    RgbColor rgb_reverse = HsvToRgb(currentColor_reverse);
+    for (int i = 0; i < 61; ++i)
+    {
+        if (i % 2) {
+            sled_set_color(i, rgb.r, rgb.g, rgb.b);
+        }
+        else {
+            sled_set_color(i, rgb_reverse.r, rgb_reverse.g, rgb_reverse.b);
+        }
+    }
+}
+
+/* Move from even color to a rainbow patern and back */
+void led_profile_cycle_update_scale(void) {
+    static int t = 0;
+    const int bounce = 0xFF / 2;
+    HsvColor currentColor = {.h = 0, .s = 0xFF, .v = 0xFF};
+    currentColor.v = led_brightness;
+    t += 1;
+    if (t > 0xFF) t = 0;
+    int r = abs((unsigned long) t - bounce);
+    for (int i = 0; i < 61; ++i)
+    {
+        currentColor.h = (int) ((float) i * r) / 30;
+        RgbColor rgb = HsvToRgb(currentColor);
+        sled_set_color(i, rgb.r, rgb.g, rgb.b);
+    }
+}
 // ========= END PROFILES ===========
 
 const led_profile_t led_profiles[] = {
     {led_profile_cycle_update},
     {led_profile_static_update},
+    {led_profile_cycle_update_half},
+    {led_profile_cycle_update_bidirectional},
+    {led_profile_cycle_update_scale},
 };
 
 static uint8_t current_profile = 0;
